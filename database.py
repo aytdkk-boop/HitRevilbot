@@ -1,0 +1,163 @@
+# database.py
+import sqlite3
+import secrets
+import string
+from datetime import datetime, timedelta
+from pathlib import Path
+
+from config import KEY_LENGTH
+
+DB_PATH = Path(__file__).parent / "hitrevil.db"
+
+
+def get_conn():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    conn = get_conn()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            telegram_id   INTEGER PRIMARY KEY,
+            username      TEXT,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS keys (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            key           TEXT UNIQUE NOT NULL,
+            telegram_id   INTEGER NOT NULL,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expires_at    DATETIME NOT NULL,
+            activated     INTEGER DEFAULT 0,
+            activated_at  DATETIME,
+            notified      INTEGER DEFAULT 0,
+            FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_keys_key ON keys(key);
+        CREATE INDEX IF NOT EXISTS idx_keys_telegram ON keys(telegram_id);
+    """)
+    conn.commit()
+    conn.close()
+
+
+def generate_key() -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(KEY_LENGTH))
+
+
+def create_user(telegram_id: int, username: str = ""):
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO users (telegram_id, username) VALUES (?, ?)",
+        (telegram_id, username),
+    )
+    conn.execute(
+        "UPDATE users SET username = ? WHERE telegram_id = ?",
+        (username, telegram_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_active_key_for_user(telegram_id: int):
+    conn = get_conn()
+    row = conn.execute(
+        """SELECT * FROM keys
+           WHERE telegram_id = ?
+             AND expires_at > CURRENT_TIMESTAMP
+           ORDER BY created_at DESC
+           LIMIT 1""",
+        (telegram_id,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def create_key(telegram_id: int, duration_seconds: int) -> dict:
+    key = generate_key()
+    expires_at = datetime.utcnow() + timedelta(seconds=duration_seconds)
+
+    conn = get_conn()
+    while conn.execute("SELECT 1 FROM keys WHERE key = ?", (key,)).fetchone():
+        key = generate_key()
+
+    conn.execute(
+        "INSERT INTO keys (key, telegram_id, expires_at) VALUES (?, ?, ?)",
+        (key, telegram_id, expires_at.isoformat()),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM keys WHERE key = ?", (key,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def find_key(key: str):
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM keys WHERE key = ?", (key,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def activate_key(key: str) -> dict:
+    row = find_key(key)
+    if not row:
+        return {"valid": False, "reason": "not_found"}
+
+    expires_at = datetime.fromisoformat(row["expires_at"])
+    if expires_at < datetime.utcnow():
+        return {"valid": False, "reason": "expired"}
+
+    if row["activated"]:
+        return {"valid": False, "reason": "already_used"}
+
+    conn = get_conn()
+    conn.execute(
+        "UPDATE keys SET activated = 1, activated_at = CURRENT_TIMESTAMP WHERE key = ?",
+        (key,),
+    )
+    conn.commit()
+    conn.close()
+
+    return {"valid": True, "expires_at": row["expires_at"]}
+
+
+def get_expired_keys_not_notified():
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT * FROM keys
+           WHERE expires_at <= CURRENT_TIMESTAMP
+             AND notified = 0
+           ORDER BY expires_at DESC"""
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def mark_key_notified(key_id: int):
+    conn = get_conn()
+    conn.execute("UPDATE keys SET notified = 1 WHERE id = ?", (key_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_stats() -> dict:
+    conn = get_conn()
+    total_users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    total_keys = conn.execute("SELECT COUNT(*) FROM keys").fetchone()[0]
+    active_keys = conn.execute(
+        "SELECT COUNT(*) FROM keys WHERE expires_at > CURRENT_TIMESTAMP"
+    ).fetchone()[0]
+    activated_keys = conn.execute(
+        "SELECT COUNT(*) FROM keys WHERE activated = 1"
+    ).fetchone()[0]
+    conn.close()
+    return {
+        "total_users": total_users,
+        "total_keys": total_keys,
+        "active_keys": active_keys,
+        "activated_keys": activated_keys,
+    }
