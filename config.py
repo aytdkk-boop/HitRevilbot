@@ -10,7 +10,7 @@ ADMIN_IDS = [int(x) for x in getenv("ADMIN_IDS", "7317419505").split(",")]
 # ===== API =====
 API_SECRET = getenv("API_SECRET", "change-me-to-random-string")
 API_HOST = getenv("API_HOST", "0.0.0.0")
-API_PORT = int(getenv("PORT", getenv("API_PORT", "8000")))
+API_PORT = int(getenv("PORT", getenv("API_PORT", "3000")))
 API_URL = getenv("API_URL", f"http://127.0.0.1:{API_PORT}")
 
 # Домены, которым разрешено обращаться к API
