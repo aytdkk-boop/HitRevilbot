@@ -15,7 +15,7 @@ API_URL = getenv("API_URL", f"http://127.0.0.1:{API_PORT}")
 
 # Домены, которым разрешено обращаться к API
 ALLOWED_ORIGINS = [
-    "https://ваш-ник.github.io",
+    "https://aytdkk-boop.github.io",
     "http://localhost:8000",
 ]
 
