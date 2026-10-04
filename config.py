@@ -2,7 +2,7 @@
 from os import getenv
 
 # ===== TELEGRAM =====
-BOT_TOKEN = getenv("BOT_TOKEN", "8726658845:AAG1lotwUabNefv3dxejKhYG8csHAYDyyks")
+BOT_TOKEN = getenv("BOT_TOKEN", "8833567815:AAF-sYRVH7P-pRxZFbXXrUbRoVrNof__ALw")
 
 # ID администраторов (узнать у @userinfobot)
 ADMIN_IDS = [int(x) for x in getenv("ADMIN_IDS", "7317419505").split(",")]
@@ -16,7 +16,7 @@ API_URL = getenv("API_URL", f"http://127.0.0.1:{API_PORT}")
 # Домены, которым разрешено обращаться к API
 ALLOWED_ORIGINS = [
     "https://ваш-ник.github.io",
-    "http://localhost:8000",
+    "http://localhost:3000",
 ]
 
 # ===== ЛОГИКА КЛЮЧЕЙ =====
