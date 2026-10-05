@@ -15,7 +15,7 @@ API_URL = getenv("API_URL", f"http://127.0.0.1:{API_PORT}")
 
 PUBLIC_BASE_URL = getenv(
     "PUBLIC_BASE_URL",
-    "https://bot-1791221809-5000-lilos457.bothost.tech"
+    "https://bot-1791227163-6265-lilos457.bothost.tech"
 )
 
 # Домены, которым разрешено обращаться к API
