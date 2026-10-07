@@ -19,6 +19,7 @@ from database import (
     init_db, create_user, create_key,
     get_active_key_for_user, activate_key, get_stats,
     find_key, mark_key_deleted, get_admin_stats, is_admin_key,
+    get_admin_users,
 )
 
 
@@ -81,6 +82,12 @@ class AdminStatsRequest(BaseModel):
 
 class MeRequest(BaseModel):
     key: str
+
+class AdminUsersRequest(BaseModel):
+    key: str
+    site_id: str | None = None
+    limit: int = 20
+    offset: int = 0
 
 
 # ===== ЭНДПОИНТЫ =====
@@ -296,3 +303,38 @@ def api_me(payload: MeRequest):
         return {"is_admin": False}
 
     return {"is_admin": is_admin_key(key)}
+
+
+@app.post("/api/admin/users")
+def api_admin_users(payload: AdminUsersRequest):
+    """Список пользователей с активированными ключами. Только для админов."""
+    key = payload.key.strip()
+    if not key:
+        raise HTTPException(status_code=401, detail="No key")
+
+    # Проверяем, что ключ вообще существует и не истёк
+    row = find_key(key)
+    if not row:
+        raise HTTPException(status_code=401, detail="Invalid key")
+
+    try:
+        expires_at = datetime.strptime(row["expires_at"], '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        expires_at = datetime.fromisoformat(row["expires_at"].replace('Z', ''))
+
+    if expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Key expired")
+
+    # Проверяем, что ключ админский
+    if not is_admin_key(key):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    # Привязка к устройству
+    if payload.site_id and row.get("site_id") and row["site_id"] != payload.site_id:
+        raise HTTPException(status_code=401, detail="Key bound to another device")
+
+    # Ограничиваем разумно, чтобы не выгрузить всю БД случайно
+    limit = max(1, min(int(payload.limit), 100))
+    offset = max(0, int(payload.offset))
+
+    return get_admin_users(limit=limit, offset=offset)
