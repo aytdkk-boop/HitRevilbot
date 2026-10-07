@@ -18,7 +18,7 @@ from config import (
 from database import (
     init_db, create_user, create_key,
     get_active_key_for_user, activate_key, get_stats,
-    find_key, mark_key_deleted, get_admin_stats,
+    find_key, mark_key_deleted, get_admin_stats, is_admin_key,
 )
 
 
@@ -78,6 +78,9 @@ class UploadRequest(BaseModel):
 class AdminStatsRequest(BaseModel):
     key: str
     site_id: str | None = None
+
+class MeRequest(BaseModel):
+    key: str
 
 
 # ===== ЭНДПОИНТЫ =====
@@ -283,3 +286,13 @@ def api_admin_stats(payload: AdminStatsRequest):
         raise HTTPException(status_code=401, detail="Key bound to another device")
 
     return get_admin_stats()
+
+
+@app.post("/api/me")
+def api_me(payload: MeRequest):
+    """Возвращает, является ли ключ админским."""
+    key = payload.key.strip()
+    if not key:
+        return {"is_admin": False}
+
+    return {"is_admin": is_admin_key(key)}
