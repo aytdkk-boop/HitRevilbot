@@ -19,7 +19,7 @@ from database import (
     init_db, create_user, create_key,
     get_active_key_for_user, activate_key, get_stats,
     find_key, mark_key_deleted, get_admin_stats, is_admin_key,
-    get_admin_users,
+    get_admin_users, get_users_statuses
 )
 
 
@@ -89,8 +89,13 @@ class AdminUsersRequest(BaseModel):
     limit: int = 20
     offset: int = 0
 
+class StatusesRequest(BaseModel):
+    key: str
+    site_id: str | None = None
+    telegram_ids: list[int] = []
 
-# ===== ЭНДПОИНТЫ =====
+
+# ===== ЭНДПОИНТЫ =====.
 
 @app.get("/")
 def root():
@@ -338,3 +343,35 @@ def api_admin_users(payload: AdminUsersRequest):
     offset = max(0, int(payload.offset))
 
     return get_admin_users(limit=limit, offset=offset)
+
+
+@app.post("/api/admin/users/statuses")
+def api_admin_users_statuses(payload: StatusesRequest):
+    """Возвращает текущий статус (активен/не активен) для переданных telegram_id."""
+    key = payload.key.strip()
+    if not key:
+        raise HTTPException(status_code=401, detail="No key")
+
+    row = find_key(key)
+    if not row:
+        raise HTTPException(status_code=401, detail="Invalid key")
+
+    try:
+        expires_at = datetime.strptime(row["expires_at"], '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        expires_at = datetime.fromisoformat(row["expires_at"].replace('Z', ''))
+
+    if expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Key expired")
+
+    if not is_admin_key(key):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    if payload.site_id and row.get("site_id") and row["site_id"] != payload.site_id:
+        raise HTTPException(status_code=401, detail="Key bound to another device")
+
+    # Ограничиваем размер запроса — не больше 100 id за раз
+    ids = list(payload.telegram_ids)[:100]
+
+    statuses = get_users_statuses(ids)
+    return {"statuses": statuses}
