@@ -392,3 +392,19 @@ def delete_key_by_id(key_id: int) -> bool:
     conn.commit()
     conn.close()
     return deleted
+
+
+def get_admin_stats() -> dict:
+    conn = get_conn()
+    total = conn.execute("SELECT COUNT(*) FROM keys").fetchone()[0]
+    active = conn.execute("""
+        SELECT COUNT(*) FROM keys
+        WHERE activated = 1
+          AND expires_at > CURRENT_TIMESTAMP
+    """).fetchone()[0]
+    conn.close()
+    return {
+        "total_keys": total,
+        "active_keys": active,
+        "inactive_keys": total - active,
+    }
