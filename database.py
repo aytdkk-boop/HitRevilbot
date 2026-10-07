@@ -408,3 +408,21 @@ def get_admin_stats() -> dict:
         "active_keys": active,
         "inactive_keys": total - active,
     }
+
+
+def is_admin_key(key: str) -> bool:
+    """Проверяет, привязан ли ключ к админскому Telegram ID."""
+    conn = get_conn()
+
+    row = conn.execute(
+        "SELECT telegram_id FROM keys WHERE key = ?",
+        (key,),
+    ).fetchone()
+
+    conn.close()
+
+    if not row:
+        return False
+
+    from config import ADMIN_IDS
+    return row["telegram_id"] in ADMIN_IDS
