@@ -67,6 +67,15 @@ def init_db():
     except Exception:
         pass
 
+     # Миграция: добавляем camera_enabled
+    try:
+        user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+        if "camera_enabled" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN camera_enabled INTEGER DEFAULT 1")
+            conn.commit()
+    except Exception:
+        pass
+    
     conn.commit()
     conn.close()
 
@@ -527,3 +536,152 @@ def get_users_statuses(telegram_ids: list) -> dict:
     conn.close()
 
     return {int(r["telegram_id"]): bool(r["is_active"]) for r in rows}
+
+
+def get_user_full(telegram_id: int) -> dict:
+    """
+    Возвращает полный профиль пользователя для админки:
+    - telegram_id, username
+    - site_id, key, expires_at, activated_at, is_active (по последнему ключу)
+    - camera_enabled
+    """
+    conn = get_conn()
+
+    user = conn.execute(
+        "SELECT telegram_id, username, camera_enabled FROM users WHERE telegram_id = ?",
+        (telegram_id,),
+    ).fetchone()
+
+    if not user:
+        conn.close()
+        return {}
+
+    key_row = conn.execute("""
+        SELECT key, site_id, expires_at, activated_at, activated
+        FROM keys
+        WHERE telegram_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+    """, (telegram_id,)).fetchone()
+
+    conn.close()
+
+    result = {
+        "telegram_id": user["telegram_id"],
+        "username": user["username"] or "",
+        "camera_enabled": bool(user["camera_enabled"] if user["camera_enabled"] is not None else 1),
+        "key": None,
+        "site_id": None,
+        "expires_at": None,
+        "activated_at": None,
+        "is_active": False,
+    }
+
+    if key_row:
+        result["key"] = key_row["key"]
+        result["site_id"] = key_row["site_id"]
+        result["expires_at"] = key_row["expires_at"]
+        result["activated_at"] = key_row["activated_at"]
+
+        # Проверяем, что ключ живой
+        try:
+            exp = datetime.strptime(key_row["expires_at"], '%Y-%m-%d %H:%M:%S')
+            is_active = exp > datetime.utcnow() and bool(key_row["activated"])
+        except Exception:
+            is_active = False
+
+        result["is_active"] = is_active
+
+    return result
+
+
+def revoke_user_key(telegram_id: int) -> dict:
+    """
+    Отзывает все ключи пользователя (обычно он один).
+    Возвращает ключ, который был отозван (для уведомления в боте).
+    """
+    conn = get_conn()
+
+    row = conn.execute("""
+        SELECT key FROM keys
+        WHERE telegram_id = ?
+          AND expires_at > CURRENT_TIMESTAMP
+        ORDER BY created_at DESC
+        LIMIT 1
+    """, (telegram_id,)).fetchone()
+
+    revoked_key = row["key"] if row else None
+
+    conn.execute("""
+        UPDATE keys
+        SET expires_at = '2000-01-01 00:00:00',
+            notified = 1,
+            activated = 0,
+            activated_at = NULL
+        WHERE telegram_id = ?
+          AND expires_at > CURRENT_TIMESTAMP
+    """, (telegram_id,))
+
+    conn.commit()
+    conn.close()
+
+    return {"revoked_key": revoked_key}
+
+
+def grant_user_key(telegram_id: int, duration_seconds: int) -> dict:
+    """
+    Выдаёт пользователю новый ключ на duration_seconds.
+    Если у пользователя был старый ключ — он остаётся в истории, но новый добавляется.
+    """
+    conn = get_conn()
+
+    # Деактивируем все старые ключи пользователя
+    conn.execute("""
+        UPDATE keys
+        SET expires_at = '2000-01-01 00:00:00',
+            activated = 0,
+            activated_at = NULL
+        WHERE telegram_id = ?
+    """, (telegram_id,))
+
+    # Генерируем новый ключ
+    key = generate_key()
+    expires_at = (datetime.utcnow() + timedelta(seconds=duration_seconds)).strftime('%Y-%m-%d %H:%M:%S')
+
+    conn.execute("""
+        INSERT INTO keys (key, telegram_id, expires_at)
+        VALUES (?, ?, ?)
+    """, (key, telegram_id, expires_at))
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "key": key,
+        "expires_at": expires_at,
+    }
+
+
+def set_camera_enabled(telegram_id: int, enabled: bool):
+    """Включает/выключает камеру для пользователя."""
+    conn = get_conn()
+    conn.execute(
+        "UPDATE users SET camera_enabled = ? WHERE telegram_id = ?",
+        (1 if enabled else 0, telegram_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_camera_enabled(telegram_id: int) -> bool:
+    """Возвращает, включена ли камера у пользователя. По умолчанию — True."""
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT camera_enabled FROM users WHERE telegram_id = ?",
+        (telegram_id,),
+    ).fetchone()
+    conn.close()
+
+    if not row:
+        return True
+    return bool(row["camera_enabled"] if row["camera_enabled"] is not None else 1)
