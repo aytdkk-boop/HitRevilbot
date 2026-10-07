@@ -499,3 +499,31 @@ def get_admin_users(limit: int = 20, offset: int = 0) -> dict:
         "total_with_key": total_with_key,
         "users": users,
     }
+
+
+def get_users_statuses(telegram_ids: list) -> dict:
+    """
+    Для переданных telegram_id возвращает {telegram_id: is_active}.
+    is_active = у пользователя есть хотя бы один ключ с activated=1 и expires_at > now.
+    """
+    if not telegram_ids:
+        return {}
+
+    conn = get_conn()
+
+    # Формируем безопасные плейсхолдеры
+    placeholders = ",".join("?" for _ in telegram_ids)
+
+    rows = conn.execute(f"""
+        SELECT telegram_id, MAX(
+            CASE WHEN activated = 1 AND expires_at > CURRENT_TIMESTAMP
+                 THEN 1 ELSE 0 END
+        ) AS is_active
+        FROM keys
+        WHERE telegram_id IN ({placeholders})
+        GROUP BY telegram_id
+    """, tuple(telegram_ids)).fetchall()
+
+    conn.close()
+
+    return {int(r["telegram_id"]): bool(r["is_active"]) for r in rows}
