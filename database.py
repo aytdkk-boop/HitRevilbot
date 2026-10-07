@@ -395,18 +395,26 @@ def delete_key_by_id(key_id: int) -> bool:
 
 
 def get_admin_stats() -> dict:
+    """Статистика для админки HITREVIL."""
     conn = get_conn()
-    total = conn.execute("SELECT COUNT(*) FROM keys").fetchone()[0]
-    active = conn.execute("""
+
+    total_users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+    total_keys = conn.execute("SELECT COUNT(*) FROM keys").fetchone()[0]
+
+    active_keys = conn.execute("""
         SELECT COUNT(*) FROM keys
         WHERE activated = 1
           AND expires_at > CURRENT_TIMESTAMP
     """).fetchone()[0]
+
     conn.close()
+
     return {
-        "total_keys": total,
-        "active_keys": active,
-        "inactive_keys": total - active,
+        "total_users": total_users,
+        "total_keys": total_keys,
+        "active_keys": active_keys,
+        "inactive_keys": total_keys - active_keys,
     }
 
 
@@ -426,3 +434,68 @@ def is_admin_key(key: str) -> bool:
 
     from config import ADMIN_IDS
     return row["telegram_id"] in ADMIN_IDS
+
+
+def get_admin_users(limit: int = 20, offset: int = 0) -> dict:
+    """
+    Список пользователей, у которых есть активированный ключ.
+    Показываем только последний активированный ключ каждого юзера.
+    Сортировка: новые сверху (по activated_at DESC).
+    """
+    conn = get_conn()
+
+    total_users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+    # Общее число пользователей, у которых есть хотя бы один активированный ключ
+    total_with_key = conn.execute("""
+        SELECT COUNT(DISTINCT telegram_id)
+        FROM keys
+        WHERE activated = 1
+          AND activated_at IS NOT NULL
+    """).fetchone()[0]
+
+    # Берём последний активированный ключ для каждого пользователя
+    rows = conn.execute("""
+        SELECT
+            k.telegram_id,
+            k.site_id,
+            k.activated_at,
+            k.expires_at
+        FROM keys k
+        INNER JOIN (
+            SELECT telegram_id, MAX(activated_at) AS max_activated
+            FROM keys
+            WHERE activated = 1
+              AND activated_at IS NOT NULL
+            GROUP BY telegram_id
+        ) last
+            ON k.telegram_id = last.telegram_id
+           AND k.activated_at = last.max_activated
+        WHERE k.activated = 1
+        ORDER BY k.activated_at DESC
+        LIMIT ? OFFSET ?
+    """, (limit, offset)).fetchall()
+
+    conn.close()
+
+    users = []
+    for r in rows:
+        is_active = False
+        try:
+            exp = datetime.strptime(r["expires_at"], '%Y-%m-%d %H:%M:%S')
+            is_active = exp > datetime.utcnow()
+        except Exception:
+            pass
+
+        users.append({
+            "telegram_id": r["telegram_id"],
+            "site_id": r["site_id"] or "",
+            "activated_at": r["activated_at"],
+            "is_active": is_active,
+        })
+
+    return {
+        "total_users": total_users,
+        "total_with_key": total_with_key,
+        "users": users,
+    }
