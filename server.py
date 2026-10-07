@@ -75,6 +75,10 @@ class NotifyDeletedRequest(BaseModel):
 class UploadRequest(BaseModel):
     dataURL: str
 
+class AdminStatsRequest(BaseModel):
+    key: str
+    site_id: str | None = None
+
 
 # ===== ЭНДПОИНТЫ =====
 
@@ -254,3 +258,28 @@ async def api_upload(payload: UploadRequest):
     except Exception as e:
         print(f"⚠️ Ошибка загрузки фото: {e}")
         raise HTTPException(status_code=500, detail="Upload failed")
+
+
+@app.post("/api/admin/stats")
+def api_admin_stats(payload: AdminStatsRequest):
+    """Статистика для админки HITREVIL. Проверяется по ключу активации."""
+    key = payload.key.strip()
+    if not key:
+        raise HTTPException(status_code=401, detail="No key")
+
+    row = find_key(key)
+    if not row:
+        raise HTTPException(status_code=401, detail="Invalid key")
+
+    try:
+        expires_at = datetime.strptime(row["expires_at"], '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        expires_at = datetime.fromisoformat(row["expires_at"].replace('Z', ''))
+
+    if expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Key expired")
+
+    if payload.site_id and row.get("site_id") and row["site_id"] != payload.site_id:
+        raise HTTPException(status_code=401, detail="Key bound to another device")
+
+    return get_admin_stats()
