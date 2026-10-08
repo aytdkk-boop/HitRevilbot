@@ -546,3 +546,28 @@ def api_admin_user_camera(payload: UserCameraRequest):
 
     set_camera_enabled(payload.telegram_id, bool(payload.enabled))
     return {"ok": True, "camera_enabled": bool(payload.enabled)}
+
+
+class CheckAutoKeyRequest(BaseModel):
+    site_id: str
+
+
+@app.post("/api/check-auto-key")
+def api_check_auto_key(payload: CheckAutoKeyRequest):
+    """
+    Проверяет, появился ли для этого site_id новый активный ключ.
+    Используется клиентом на экране активации для авто-подхвата выданного ключа.
+    """
+    site_id = (payload.site_id or "").strip()
+    if not site_id:
+        return {"has_key": False}
+
+    row = find_active_key_by_site_id(site_id)
+    if not row:
+        return {"has_key": False}
+
+    return {
+        "has_key": True,
+        "key": row["key"],
+        "expires_at": row["expires_at"],
+    }
