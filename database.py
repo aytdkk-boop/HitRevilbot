@@ -628,10 +628,10 @@ def revoke_user_key(telegram_id: int) -> dict:
     return {"revoked_key": revoked_key}
 
 
-def grant_user_key(telegram_id: int, duration_seconds: int) -> dict:
+def grant_user_key(telegram_id: int, duration_seconds: int, site_id: str = None) -> dict:
     """
-    Выдаёт пользователю новый ключ на duration_seconds.
-    Если у пользователя был старый ключ — он остаётся в истории, но новый добавляется.
+    Выдаёт пользователю новый ключ.
+    Если site_id передан — ключ сразу активируется для этого устройства.
     """
     conn = get_conn()
 
@@ -648,10 +648,18 @@ def grant_user_key(telegram_id: int, duration_seconds: int) -> dict:
     key = generate_key()
     expires_at = (datetime.utcnow() + timedelta(seconds=duration_seconds)).strftime('%Y-%m-%d %H:%M:%S')
 
-    conn.execute("""
-        INSERT INTO keys (key, telegram_id, expires_at)
-        VALUES (?, ?, ?)
-    """, (key, telegram_id, expires_at))
+    if site_id:
+        # Сразу активированный ключ, привязанный к устройству
+        conn.execute("""
+            INSERT INTO keys (key, telegram_id, expires_at, activated, activated_at, site_id)
+            VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP, ?)
+        """, (key, telegram_id, expires_at, site_id))
+    else:
+        # Обычная выдача — юзер должен ввести ключ сам
+        conn.execute("""
+            INSERT INTO keys (key, telegram_id, expires_at)
+            VALUES (?, ?, ?)
+        """, (key, telegram_id, expires_at))
 
     conn.commit()
     conn.close()
@@ -659,6 +667,38 @@ def grant_user_key(telegram_id: int, duration_seconds: int) -> dict:
     return {
         "key": key,
         "expires_at": expires_at,
+        "site_id": site_id,
+    }
+
+
+def find_active_key_by_site_id(site_id: str) -> dict:
+    """
+    Ищет последний активированный ключ, привязанный к этому site_id.
+    Используется для автоматической выдачи ключа на устройстве пользователя.
+    """
+    if not site_id:
+        return {}
+
+    conn = get_conn()
+    row = conn.execute("""
+        SELECT key, telegram_id, expires_at, activated_at
+        FROM keys
+        WHERE site_id = ?
+          AND activated = 1
+          AND expires_at > CURRENT_TIMESTAMP
+        ORDER BY activated_at DESC
+        LIMIT 1
+    """, (site_id,)).fetchone()
+    conn.close()
+
+    if not row:
+        return {}
+
+    return {
+        "key": row["key"],
+        "telegram_id": row["telegram_id"],
+        "expires_at": row["expires_at"],
+        "activated_at": row["activated_at"],
     }
 
 
