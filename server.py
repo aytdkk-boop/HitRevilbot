@@ -22,6 +22,7 @@ from database import (
     get_admin_users, get_users_statuses,
     get_user_full, revoke_user_key, grant_user_key,
     set_camera_enabled, get_camera_enabled,
+    find_active_key_by_site_id,
 )
 
 
@@ -485,7 +486,7 @@ def api_admin_user_revoke(payload: UserRevokeRequest):
 
 @app.post("/api/admin/user/grant")
 def api_admin_user_grant(payload: UserGrantRequest):
-    """Выдаёт пользователю новый ключ и уведомляет его в боте."""
+    """Выдаёт пользователю новый ключ с авто-активацией на его устройстве."""
     _check_admin_key(payload.key, payload.site_id)
 
     duration_code = payload.duration.strip()
@@ -494,7 +495,12 @@ def api_admin_user_grant(payload: UserGrantRequest):
 
     duration_seconds = KEY_DURATIONS[duration_code]
 
-    res = grant_user_key(payload.telegram_id, duration_seconds)
+    # Берём текущий site_id пользователя (если он где-то активировался)
+    user_info = get_user_full(payload.telegram_id)
+    user_site_id = user_info.get("site_id") if user_info else None
+
+    # Выдаём ключ с авто-активацией, если знаем site_id
+    res = grant_user_key(payload.telegram_id, duration_seconds, site_id=user_site_id)
     new_key = res["key"]
     expires_at = res["expires_at"]
 
