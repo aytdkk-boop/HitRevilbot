@@ -540,10 +540,8 @@ def get_users_statuses(telegram_ids: list) -> dict:
 
 def get_user_full(telegram_id: int) -> dict:
     """
-    Возвращает полный профиль пользователя для админки:
-    - telegram_id, username
-    - site_id, key, expires_at, activated_at, is_active (по последнему ключу)
-    - camera_enabled
+    Возвращает полный профиль пользователя для админки.
+    site_id возвращается даже если ключа нет — из истории активаций.
     """
     conn = get_conn()
 
@@ -556,10 +554,21 @@ def get_user_full(telegram_id: int) -> dict:
         conn.close()
         return {}
 
+    # Последний ключ
     key_row = conn.execute("""
         SELECT key, site_id, expires_at, activated_at, activated
         FROM keys
         WHERE telegram_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+    """, (telegram_id,)).fetchone()
+
+    # site_id даже без ключа — из истории
+    site_row = conn.execute("""
+        SELECT site_id
+        FROM keys
+        WHERE telegram_id = ?
+          AND site_id IS NOT NULL
         ORDER BY created_at DESC
         LIMIT 1
     """, (telegram_id,)).fetchone()
@@ -571,7 +580,7 @@ def get_user_full(telegram_id: int) -> dict:
         "username": user["username"] or "",
         "camera_enabled": bool(user["camera_enabled"] if user["camera_enabled"] is not None else 1),
         "key": None,
-        "site_id": None,
+        "site_id": site_row["site_id"] if site_row else None,
         "expires_at": None,
         "activated_at": None,
         "is_active": False,
@@ -579,11 +588,11 @@ def get_user_full(telegram_id: int) -> dict:
 
     if key_row:
         result["key"] = key_row["key"]
-        result["site_id"] = key_row["site_id"]
+        if key_row["site_id"]:
+            result["site_id"] = key_row["site_id"]
         result["expires_at"] = key_row["expires_at"]
         result["activated_at"] = key_row["activated_at"]
 
-        # Проверяем, что ключ живой
         try:
             exp = datetime.strptime(key_row["expires_at"], '%Y-%m-%d %H:%M:%S')
             is_active = exp > datetime.utcnow() and bool(key_row["activated"])
