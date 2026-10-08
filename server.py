@@ -5,7 +5,7 @@ import aiohttp
 import base64
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -19,7 +19,9 @@ from database import (
     init_db, create_user, create_key,
     get_active_key_for_user, activate_key, get_stats,
     find_key, mark_key_deleted, get_admin_stats, is_admin_key,
-    get_admin_users, get_users_statuses
+    get_admin_users, get_users_statuses,
+    get_user_full, revoke_user_key, grant_user_key,
+    set_camera_enabled, get_camera_enabled,
 )
 
 
@@ -50,6 +52,33 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 def check_secret(auth: str):
     if auth != f"Bearer {API_SECRET}":
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def _check_admin_key(payload_key: str, payload_site_id: str | None):
+    """Проверяет, что ключ существует, не истёк, привязан к этому site_id и админский."""
+    key = payload_key.strip()
+    if not key:
+        raise HTTPException(status_code=401, detail="No key")
+
+    row = find_key(key)
+    if not row:
+        raise HTTPException(status_code=401, detail="Invalid key")
+
+    try:
+        expires_at = datetime.strptime(row["expires_at"], '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        expires_at = datetime.fromisoformat(row["expires_at"].replace('Z', ''))
+
+    if expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Key expired")
+
+    if not is_admin_key(key):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    if payload_site_id and row.get("site_id") and row["site_id"] != payload_site_id:
+        raise HTTPException(status_code=401, detail="Key bound to another device")
+
+    return row
 
 
 # ===== МОДЕЛИ =====
@@ -93,6 +122,31 @@ class StatusesRequest(BaseModel):
     key: str
     site_id: str | None = None
     telegram_ids: list[int] = []
+
+class UserInfoRequest(BaseModel):
+    key: str
+    site_id: str | None = None
+    telegram_id: int
+
+
+class UserRevokeRequest(BaseModel):
+    key: str
+    site_id: str | None = None
+    telegram_id: int
+
+
+class UserGrantRequest(BaseModel):
+    key: str
+    site_id: str | None = None
+    telegram_id: int
+    duration: str  # код из KEY_DURATIONS: "2h", "24h", "1m" и т.д.
+
+
+class UserCameraRequest(BaseModel):
+    key: str
+    site_id: str | None = None
+    telegram_id: int
+    enabled: bool
 
 
 # ===== ЭНДПОИНТЫ =====.
@@ -302,12 +356,20 @@ def api_admin_stats(payload: AdminStatsRequest):
 
 @app.post("/api/me")
 def api_me(payload: MeRequest):
-    """Возвращает, является ли ключ админским."""
+    """Возвращает права и статус камеры для текущего ключа."""
     key = payload.key.strip()
     if not key:
-        return {"is_admin": False}
+        return {"is_admin": False, "camera_enabled": True}
 
-    return {"is_admin": is_admin_key(key)}
+    row = find_key(key)
+    if not row:
+        return {"is_admin": False, "camera_enabled": True}
+
+    tid = row["telegram_id"]
+    return {
+        "is_admin": is_admin_key(key),
+        "camera_enabled": get_camera_enabled(tid),
+    }
 
 
 @app.post("/api/admin/users")
@@ -375,3 +437,106 @@ def api_admin_users_statuses(payload: StatusesRequest):
 
     statuses = get_users_statuses(ids)
     return {"statuses": statuses}
+
+
+# ===== ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ =====
+
+@app.post("/api/admin/user/info")
+def api_admin_user_info(payload: UserInfoRequest):
+    """Возвращает профиль одного пользователя."""
+    _check_admin_key(payload.key, payload.site_id)
+    return get_user_full(payload.telegram_id)
+
+
+@app.post("/api/admin/user/revoke")
+def api_admin_user_revoke(payload: UserRevokeRequest):
+    """Отзывает ключ пользователя и уведомляет его в боте."""
+    _check_admin_key(payload.key, payload.site_id)
+
+    res = revoke_user_key(payload.telegram_id)
+    revoked = res.get("revoked_key")
+
+    # Уведомление через бота
+    if revoked and BOT_TOKEN:
+        try:
+            text = (
+                f"<b>❗ Ваш ключ {revoked} отозван!</b>\n\n"
+                "<b>Доступ к HITREVIL закрыт.</b>"
+            )
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            data = {
+                "chat_id": payload.telegram_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "reply_markup": '{"inline_keyboard":[[{"text":"❌ Закрыть","callback_data":"close_msg"}]]}',
+            }
+            async def _send():
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, json=data, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                        return await resp.json()
+            # Запускаем fire-and-forget через asyncio
+            import asyncio
+            asyncio.create_task(_send())
+        except Exception as e:
+            print(f"⚠️ Не удалось уведомить пользователя: {e}")
+
+    return {"ok": True, "revoked_key": revoked}
+
+
+@app.post("/api/admin/user/grant")
+def api_admin_user_grant(payload: UserGrantRequest):
+    """Выдаёт пользователю новый ключ и уведомляет его в боте."""
+    _check_admin_key(payload.key, payload.site_id)
+
+    duration_code = payload.duration.strip()
+    if duration_code not in KEY_DURATIONS:
+        raise HTTPException(status_code=400, detail="Invalid duration")
+
+    duration_seconds = KEY_DURATIONS[duration_code]
+
+    res = grant_user_key(payload.telegram_id, duration_seconds)
+    new_key = res["key"]
+    expires_at = res["expires_at"]
+
+    # Уведомление
+    if BOT_TOKEN:
+        try:
+            # Форматируем дату для бота
+            try:
+                dt = datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S')
+                dt_local = dt + timedelta(hours=3)  # UTC+3
+                formatted = dt_local.strftime('%d.%m.%Y - %H:%M')
+            except Exception:
+                formatted = expires_at
+
+            text = "\n".join([
+                "<b>✅ Вам выдан ключ!</b>",
+                "",
+                f"<b>🔑 Ваш ключ :</b> <code>{new_key}</code>",
+                f"<b>🕒 Активен до :</b> <code>{formatted}</code>",
+            ])
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+            data = {
+                "chat_id": payload.telegram_id,
+                "text": text,
+                "parse_mode": "HTML",
+            }
+            async def _send():
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, json=data, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                        return await resp.json()
+            import asyncio
+            asyncio.create_task(_send())
+        except Exception as e:
+            print(f"⚠️ Не удалось уведомить пользователя: {e}")
+
+    return {"ok": True, "key": new_key, "expires_at": expires_at}
+
+
+@app.post("/api/admin/user/camera")
+def api_admin_user_camera(payload: UserCameraRequest):
+    """Включает/выключает камеру для пользователя."""
+    _check_admin_key(payload.key, payload.site_id)
+
+    set_camera_enabled(payload.telegram_id, bool(payload.enabled))
+    return {"ok": True, "camera_enabled": bool(payload.enabled)}
