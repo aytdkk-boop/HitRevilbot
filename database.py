@@ -67,30 +67,30 @@ def init_db():
     except Exception:
         pass
 
-     # Миграция: добавляем camera_enabled
-     try:
-         user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
-         if "camera_enabled" not in user_cols:
-             conn.execute("ALTER TABLE users ADD COLUMN camera_enabled INTEGER DEFAULT 1")
-             conn.commit()
-     except Exception:
-         pass
+    # Миграция: добавляем camera_enabled
+    try:
+        user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+        if "camera_enabled" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN camera_enabled INTEGER DEFAULT 1")
+            conn.commit()
+    except Exception:
+        pass
 
-     # Миграция: тумблеры управления пользователем (админские)
-     try:
-         user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
-          if "key_delete_disabled" not in user_cols:
-              conn.execute("ALTER TABLE users ADD COLUMN key_delete_disabled INTEGER DEFAULT 0")
-              conn.commit()
-          if "autosave_disabled" not in user_cols:
-              conn.execute("ALTER TABLE users ADD COLUMN autosave_disabled INTEGER DEFAULT 0")
-              conn.commit()
-          if "theme_disabled" not in user_cols:
-              conn.execute("ALTER TABLE users ADD COLUMN theme_disabled INTEGER DEFAULT 0")
-              conn.commit()
-      except Exception:
-          pass
-    
+    # Миграция: тумблеры управления пользователем (админские)
+    try:
+        user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+        if "key_delete_disabled" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN key_delete_disabled INTEGER DEFAULT 0")
+            conn.commit()
+        if "autosave_disabled" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN autosave_disabled INTEGER DEFAULT 0")
+            conn.commit()
+        if "theme_disabled" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN theme_disabled INTEGER DEFAULT 0")
+            conn.commit()
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
 
