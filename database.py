@@ -561,9 +561,11 @@ def get_user_full(telegram_id: int) -> dict:
     conn = get_conn()
 
     user = conn.execute(
-        "SELECT telegram_id, username, camera_enabled FROM users WHERE telegram_id = ?",
-        (telegram_id,),
-    ).fetchone()
+    """SELECT telegram_id, username, camera_enabled,
+              key_delete_disabled, autosave_disabled, theme_disabled
+       FROM users WHERE telegram_id = ?""",
+    (telegram_id,),
+).fetchone()
 
     if not user:
         conn.close()
@@ -591,15 +593,18 @@ def get_user_full(telegram_id: int) -> dict:
     conn.close()
 
     result = {
-        "telegram_id": user["telegram_id"],
-        "username": user["username"] or "",
-        "camera_enabled": bool(user["camera_enabled"] if user["camera_enabled"] is not None else 1),
-        "key": None,
-        "site_id": site_row["site_id"] if site_row else None,
-        "expires_at": None,
-        "activated_at": None,
-        "is_active": False,
-    }
+    "telegram_id": user["telegram_id"],
+    "username": user["username"] or "",
+    "camera_enabled": bool(user["camera_enabled"] if user["camera_enabled"] is not None else 1),
+    "key_delete_disabled": bool(user["key_delete_disabled"] or 0),
+    "autosave_disabled": bool(user["autosave_disabled"] or 0),
+    "theme_disabled": bool(user["theme_disabled"] or 0),
+    "key": None,
+    "site_id": site_row["site_id"] if site_row else None,
+    "expires_at": None,
+    "activated_at": None,
+    "is_active": False,
+}
 
     if key_row:
         result["key"] = key_row["key"]
