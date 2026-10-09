@@ -23,6 +23,7 @@ from database import (
     get_user_full, revoke_user_key, grant_user_key,
     set_camera_enabled, get_camera_enabled,
     find_active_key_by_site_id,
+    get_user_controls, set_user_control,
 )
 
 
@@ -357,21 +358,37 @@ def api_admin_stats(payload: AdminStatsRequest):
 
 @app.post("/api/me")
 def api_me(payload: MeRequest):
-    """Возвращает права и статус камеры для текущего ключа."""
+    """Возвращает права, статус камеры и флаги блокировок для текущего ключа."""
     key = payload.key.strip()
     if not key:
-        return {"is_admin": False, "camera_enabled": True}
+        return {
+            "is_admin": False,
+            "camera_enabled": True,
+            "key_delete_disabled": False,
+            "autosave_disabled": False,
+            "theme_disabled": False,
+        }
 
     row = find_key(key)
     if not row:
-        return {"is_admin": False, "camera_enabled": True}
+        return {
+            "is_admin": False,
+            "camera_enabled": True,
+            "key_delete_disabled": False,
+            "autosave_disabled": False,
+            "theme_disabled": False,
+        }
 
     tid = row["telegram_id"]
+    controls = get_user_controls(tid)
+
     return {
         "is_admin": is_admin_key(key),
         "camera_enabled": get_camera_enabled(tid),
+        "key_delete_disabled": controls.get("key_delete_disabled", False),
+        "autosave_disabled": controls.get("autosave_disabled", False),
+        "theme_disabled": controls.get("theme_disabled", False),
     }
-
 
 @app.post("/api/admin/users")
 def api_admin_users(payload: AdminUsersRequest):
@@ -571,3 +588,25 @@ def api_check_auto_key(payload: CheckAutoKeyRequest):
         "key": row["key"],
         "expires_at": row["expires_at"],
     }
+
+class UserToggleRequest(BaseModel):
+    key: str
+    site_id: str | None = None
+    telegram_id: int
+    control: str      # 'key_delete' | 'autosave' | 'theme'
+    enabled: bool     # True = заблокировано, False = разрешено
+
+
+@app.post("/api/admin/user/toggle")
+def api_admin_user_toggle(payload: UserToggleRequest):
+    """Включает/выключает один из управляющих флагов пользователя."""
+    _check_admin_key(payload.key, payload.site_id)
+
+    if payload.control not in ("key_delete", "autosave", "theme"):
+        raise HTTPException(status_code=400, detail="Invalid control")
+
+    ok = set_user_control(payload.telegram_id, payload.control, bool(payload.enabled))
+    if not ok:
+        raise HTTPException(status_code=400, detail="Failed to set control")
+
+    return {"ok": True, "control": payload.control, "enabled": bool(payload.enabled)}
