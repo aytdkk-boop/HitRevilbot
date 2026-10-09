@@ -68,13 +68,13 @@ def init_db():
         pass
 
      # Миграция: добавляем camera_enabled
-    try:
-        user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
-        if "camera_enabled" not in user_cols:
-            conn.execute("ALTER TABLE users ADD COLUMN camera_enabled INTEGER DEFAULT 1")
-            conn.commit()
-    except Exception:
-        pass
+     try:
+         user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+         if "camera_enabled" not in user_cols:
+             conn.execute("ALTER TABLE users ADD COLUMN camera_enabled INTEGER DEFAULT 1")
+             conn.commit()
+     except Exception:
+         pass
 
      # Миграция: тумблеры управления пользователем (админские)
      try:
