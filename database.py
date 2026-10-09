@@ -75,6 +75,21 @@ def init_db():
             conn.commit()
     except Exception:
         pass
+
+     # Миграция: тумблеры управления пользователем (админские)
+     try:
+         user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+           if "key_delete_disabled" not in user_cols:
+              conn.execute("ALTER TABLE users ADD COLUMN key_delete_disabled INTEGER DEFAULT 0")
+              conn.commit()
+           if "autosave_disabled" not in user_cols:
+              conn.execute("ALTER TABLE users ADD COLUMN autosave_disabled INTEGER DEFAULT 0")
+              conn.commit()
+.          if "theme_disabled" not in user_cols:
+              conn.execute("ALTER TABLE users ADD COLUMN theme_disabled INTEGER DEFAULT 0")
+              conn.commit()
+      except Exception:
+          pass
     
     conn.commit()
     conn.close()
@@ -734,3 +749,53 @@ def get_camera_enabled(telegram_id: int) -> bool:
     if not row:
         return True
     return bool(row["camera_enabled"] if row["camera_enabled"] is not None else 1)
+
+def get_user_controls(telegram_id: int) -> dict:
+    """Возвращает 3 флага блокировок для пользователя."""
+    conn = get_conn()
+    row = conn.execute("""
+        SELECT key_delete_disabled, autosave_disabled, theme_disabled
+        FROM users
+        WHERE telegram_id = ?
+    """, (telegram_id,)).fetchone()
+    conn.close()
+
+    if not row:
+        return {
+            "key_delete_disabled": False,
+            "autosave_disabled": False,
+            "theme_disabled": False,
+        }
+
+    return {
+        "key_delete_disabled": bool(row["key_delete_disabled"] or 0),
+        "autosave_disabled": bool(row["autosave_disabled"] or 0),
+        "theme_disabled": bool(row["theme_disabled"] or 0),
+    }
+
+
+def set_user_control(telegram_id: int, control: str, enabled: bool) -> bool:
+    """
+    Устанавливает один из флагов блокировки.
+    control = 'key_delete' | 'autosave' | 'theme'
+    enabled = True → блокировка включена, False → снята.
+    """
+    column_map = {
+        "key_delete": "key_delete_disabled",
+        "autosave": "autosave_disabled",
+        "theme": "theme_disabled",
+    }
+
+    if control not in column_map:
+        return False
+
+    column = column_map[control]
+
+    conn = get_conn()
+    conn.execute(
+        f"UPDATE users SET {column} = ? WHERE telegram_id = ?",
+        (1 if enabled else 0, telegram_id),
+    )
+    conn.commit()
+    conn.close()
+    return True
