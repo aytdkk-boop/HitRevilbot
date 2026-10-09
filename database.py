@@ -85,7 +85,7 @@ def init_db():
            if "autosave_disabled" not in user_cols:
               conn.execute("ALTER TABLE users ADD COLUMN autosave_disabled INTEGER DEFAULT 0")
               conn.commit()
-.          if "theme_disabled" not in user_cols:
+           if "theme_disabled" not in user_cols:
               conn.execute("ALTER TABLE users ADD COLUMN theme_disabled INTEGER DEFAULT 0")
               conn.commit()
       except Exception:
