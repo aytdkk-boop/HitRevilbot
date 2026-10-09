@@ -79,13 +79,13 @@ def init_db():
      # Миграция: тумблеры управления пользователем (админские)
      try:
          user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
-           if "key_delete_disabled" not in user_cols:
+          if "key_delete_disabled" not in user_cols:
               conn.execute("ALTER TABLE users ADD COLUMN key_delete_disabled INTEGER DEFAULT 0")
               conn.commit()
-           if "autosave_disabled" not in user_cols:
+          if "autosave_disabled" not in user_cols:
               conn.execute("ALTER TABLE users ADD COLUMN autosave_disabled INTEGER DEFAULT 0")
               conn.commit()
-           if "theme_disabled" not in user_cols:
+          if "theme_disabled" not in user_cols:
               conn.execute("ALTER TABLE users ADD COLUMN theme_disabled INTEGER DEFAULT 0")
               conn.commit()
       except Exception:
