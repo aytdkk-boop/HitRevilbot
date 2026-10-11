@@ -149,7 +149,7 @@ class UserCameraRequest(BaseModel):
     key: str
     site_id: str | None = None
     telegram_id: int
-    enabled: book
+    enabled: bool
 
 
 class GlobalToggleRequest(BaseModel):
