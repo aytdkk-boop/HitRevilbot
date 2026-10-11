@@ -77,7 +77,7 @@ def init_db():
         pass
 
     # Миграция: таблица глобальных настроек (одна строка, id = 1)
-    try:
+.   try:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS global_settings (
                 id             INTEGER PRIMARY KEY CHECK (id = 1),
@@ -88,14 +88,14 @@ def init_db():
                 autosave       INTEGER DEFAULT 0,
                 theme          INTEGER DEFAULT 0
             )
-       """)
-       conn.execute("""
-           INSERT OR IGNORE INTO global_settings (id)
-           VALUES (1)
-       """)
-       conn.commit()
-   except Exception:
-       pass
+        """)
+        conn.execute("""
+            INSERT OR IGNORE INTO global_settings (id)
+            VALUES (1)
+        """)
+        conn.commit()
+    except Exception:
+        pass
 
     # Миграция: тумблеры управления пользователем (админские)
     try:
