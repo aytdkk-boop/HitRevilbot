@@ -78,25 +78,25 @@ def init_db():
 
     # Миграция: таблица глобальных настроек (одна строка, id = 1)
     try:
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS global_settings (
-            id             INTEGER PRIMARY KEY CHECK (id = 1),
-            full_launch    INTEGER DEFAULT 0,
-            access         INTEGER DEFAULT 0,
-            camera         INTEGER DEFAULT 0,
-            key_delete     INTEGER DEFAULT 0,
-            autosave       INTEGER DEFAULT 0,
-            theme          INTEGER DEFAULT 0
-        )
-    """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS global_settings (
+                id             INTEGER PRIMARY KEY CHECK (id = 1),
+                full_launch    INTEGER DEFAULT 0,
+                access         INTEGER DEFAULT 0,
+                camera         INTEGER DEFAULT 0,
+                key_delete     INTEGER DEFAULT 0,
+                autosave       INTEGER DEFAULT 0,
+                theme          INTEGER DEFAULT 0
+           )
+       """)
     # Гарантируем, что строка id=1 существует
-    conn.execute("""
-        INSERT OR IGNORE INTO global_settings (id)
-        VALUES (1)
-    """)
-    conn.commit()
-    except Exception:
-        pass
+       conn.execute("""
+           INSERT OR IGNORE INTO global_settings (id)
+           VALUES (1)
+       """)
+      conn.commit()
+  except Exception:
+      pass
 
     # Миграция: тумблеры управления пользователем (админские)
     try:
