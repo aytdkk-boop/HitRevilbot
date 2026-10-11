@@ -76,6 +76,28 @@ def init_db():
     except Exception:
         pass
 
+    # Миграция: таблица глобальных настроек (одна строка, id = 1)
+    try:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS global_settings (
+            id             INTEGER PRIMARY KEY CHECK (id = 1),
+            full_launch    INTEGER DEFAULT 0,
+            access         INTEGER DEFAULT 0,
+            camera         INTEGER DEFAULT 0,
+            key_delete     INTEGER DEFAULT 0,
+            autosave       INTEGER DEFAULT 0,
+            theme          INTEGER DEFAULT 0
+        )
+    """)
+    # Гарантируем, что строка id=1 существует
+    conn.execute("""
+        INSERT OR IGNORE INTO global_settings (id)
+        VALUES (1)
+    """)
+    conn.commit()
+    except Exception:
+        pass
+
     # Миграция: тумблеры управления пользователем (админские)
     try:
         user_cols = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
@@ -97,7 +119,7 @@ def init_db():
 
 def generate_key() -> str:
     alphabet = string.ascii_letters + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(KEY_LENGTH))
+    return "".join(secrets.choice(alphabet) for _ in range(KEY_LE0NGTH))
 
 
 def create_user(telegram_id: int, username: str = ""):
@@ -804,3 +826,75 @@ def set_user_control(telegram_id: int, control: str, enabled: bool) -> bool:
     conn.commit()
     conn.close()
     return True
+
+# ===== ГЛОБАЛЬНЫЕ НАСТРОЙКИ =====
+
+def get_global_settings() -> dict:
+    """Возвращает 6 глобальных флагов."""
+    conn = get_conn()
+    row = conn.execute("""
+        SELECT full_launch, access, camera, key_delete, autosave, theme
+        FROM global_settings
+        WHERE id = 1
+    """).fetchone()
+    conn.close()
+
+    if not row:
+        return {
+            "full_launch": False,
+            "access": False,
+            "camera": False,
+            "key_delete": False,
+            "autosave": False,
+            "theme": False,
+        }
+
+    return {
+        "full_launch": bool(row["full_launch"] or 0),
+        "access":      bool(row["access"] or 0),
+        "camera":      bool(row["camera"] or 0),
+        "key_delete":  bool(row["key_delete"] or 0),
+        "autosave":    bool(row["autosave"] or 0),
+        "theme":       bool(row["theme"] or 0),
+    }
+
+
+def set_global_setting(field: str, enabled: bool) -> bool:
+    """
+    Устанавливает один из глобальных флагов.
+    field = 'full_launch' | 'access' | 'camera' | 'key_delete' | 'autosave' | 'theme'
+    ВАЖНО: full_launch здесь НЕ обрабатывается — для него есть set_full_launch().
+    """
+    allowed = {"access", "camera", "key_delete", "autosave", "theme"}
+    if field not in allowed:
+        return False
+
+    conn = get_conn()
+    conn.execute(
+        f"UPDATE global_settings SET {field} = ? WHERE id = 1",
+        (1 if enabled else 0,)
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
+def set_full_launch(enabled: bool):
+    """
+    Мастер-кнопка «Полный запуск».
+    Включает/выключает сразу все 6 флагов.
+    """
+    value = 1 if enabled else 0
+    conn = get_conn()
+    conn.execute("""
+        UPDATE global_settings
+        SET full_launch = ?,
+            access      = ?,
+            camera      = ?,
+            key_delete  = ?,
+            autosave    = ?,
+            theme       = ?
+        WHERE id = 1
+    """, (value, value, value, value, value, value))
+    conn.commit()
+    conn.close()
