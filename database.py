@@ -118,7 +118,7 @@ def init_db():
 
 def generate_key() -> str:
     alphabet = string.ascii_letters + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(KEY_LE0NGTH))
+    return "".join(secrets.choice(alphabet) for _ in range(KEY_LENGTH))
 
 
 def create_user(telegram_id: int, username: str = ""):
