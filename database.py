@@ -77,7 +77,7 @@ def init_db():
         pass
 
     # Миграция: таблица глобальных настроек (одна строка, id = 1)
-.   try:
+    try:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS global_settings (
                 id             INTEGER PRIMARY KEY CHECK (id = 1),
