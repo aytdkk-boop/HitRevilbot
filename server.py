@@ -24,6 +24,7 @@ from database import (
     set_camera_enabled, get_camera_enabled,
     find_active_key_by_site_id,
     get_user_controls, set_user_control,
+    get_global_settings, set_global_setting, set_full_launch,
 )
 
 
@@ -148,6 +149,19 @@ class UserCameraRequest(BaseModel):
     key: str
     site_id: str | None = None
     telegram_id: int
+    enabled: book
+
+
+class GlobalToggleRequest(BaseModel):
+    key: str
+    site_id: str | None = None
+    field: str       # 'access' | 'camera' | 'key_delete' | 'autosave' | 'theme'
+    enabled: bool
+
+
+class GlobalFullLaunchRequest(BaseModel):
+    key: str
+    site_id: str | None = None
     enabled: bool
 
 
@@ -610,3 +624,45 @@ def api_admin_user_toggle(payload: UserToggleRequest):
         raise HTTPException(status_code=400, detail="Failed to set control")
 
     return {"ok": True, "control": payload.control, "enabled": bool(payload.enabled)}
+
+
+# ===== ГЛОБАЛЬНЫЕ НАСТРОЙКИ =====
+
+@app.get("/api/global")
+def api_global():
+    """
+    Публичный эндпоинт. Возвращает 6 глобальных флагов.
+    Не требует авторизации — вызывается клиентом пользователя.
+    """
+    return get_global_settings()
+
+
+@app.post("/api/admin/global")
+def api_admin_global(payload: GlobalToggleRequest):
+    """
+    Устанавливает один из 5 глобальных флагов (не full_launch).
+    Только для админа.
+    """
+    _check_admin_key(payload.key, payload.site_id)
+
+    if payload.field not in ("access", "camera", "key_delete", "autosave", "theme"):
+        raise HTTPException(status_code=400, detail="Invalid field")
+
+    ok = set_global_setting(payload.field, bool(payload.enabled))
+    if not ok:
+        raise HTTPException(status_code=400, detail="Failed to set")
+
+    return {"ok": True, "field": payload.field, "enabled": bool(payload.enabled)}
+
+
+@app.post("/api/admin/global/full-launch")
+def api_admin_global_full_launch(payload: GlobalFullLaunchRequest):
+    """
+    Мастер-кнопка «Полный запуск».
+    Включает/выключает сразу все 6 флагов.
+    Только для админа.
+    """
+    _check_admin_key(payload.key, payload.site_id)
+
+    set_full_launch(bool(payload.enabled))
+    return {"ok": True, "full_launch": bool(payload.enabled)}
