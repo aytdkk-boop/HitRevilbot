@@ -87,16 +87,15 @@ def init_db():
                 key_delete     INTEGER DEFAULT 0,
                 autosave       INTEGER DEFAULT 0,
                 theme          INTEGER DEFAULT 0
-           )
+            )
        """)
-    # Гарантируем, что строка id=1 существует
        conn.execute("""
            INSERT OR IGNORE INTO global_settings (id)
            VALUES (1)
        """)
-      conn.commit()
-  except Exception:
-      pass
+       conn.commit()
+   except Exception:
+       pass
 
     # Миграция: тумблеры управления пользователем (админские)
     try:
