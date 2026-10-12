@@ -780,10 +780,10 @@ def get_camera_enabled(telegram_id: int) -> bool:
     return bool(row["camera_enabled"] if row["camera_enabled"] is not None else 1)
 
 def get_user_controls(telegram_id: int) -> dict:
-    """Возвращает 3 флага блокировок для пользователя."""
+    """Возвращает 4 флага блокировок для пользователя."""
     conn = get_conn()
     row = conn.execute("""
-        SELECT key_delete_disabled, autosave_disabled, theme_disabled
+        SELECT key_delete_disabled, autosave_disabled, theme_disabled, access_disabled
         FROM users
         WHERE telegram_id = ?
     """, (telegram_id,)).fetchone()
@@ -794,12 +794,14 @@ def get_user_controls(telegram_id: int) -> dict:
             "key_delete_disabled": False,
             "autosave_disabled": False,
             "theme_disabled": False,
+            "access_disabled": False,
         }
 
     return {
         "key_delete_disabled": bool(row["key_delete_disabled"] or 0),
         "autosave_disabled": bool(row["autosave_disabled"] or 0),
         "theme_disabled": bool(row["theme_disabled"] or 0),
+        "access_disabled": bool(row["access_disabled"] or 0),
     }
 
 
