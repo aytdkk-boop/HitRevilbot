@@ -447,8 +447,11 @@ def get_admin_stats() -> dict:
     conn = get_conn()
 
     total_users = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-
     total_keys = conn.execute("SELECT COUNT(*) FROM keys").fetchone()[0]
+
+    # Проверяем full_launch
+    gs_row = conn.execute("SELECT full_launch FROM global_settings WHERE id = 1").fetchone()
+    full_launch = bool(gs_row["full_launch"]) if gs_row else False
 
     active_keys = conn.execute("""
         SELECT COUNT(*) FROM keys
@@ -457,6 +460,15 @@ def get_admin_stats() -> dict:
     """).fetchone()[0]
 
     conn.close()
+
+    # Если полный запуск выключен — все "активные" становятся "не активными"
+    if not full_launch:
+        return {
+            "total_users": total_users,
+            "total_keys": total_keys,
+            "active_keys": 0,
+            "inactive_keys": total_keys,
+        }
 
     return {
         "total_users": total_users,
@@ -887,10 +899,12 @@ def set_global_setting(field: str, enabled: bool) -> bool:
 def set_full_launch(enabled: bool):
     """
     Мастер-кнопка «Полный запуск».
-    Включает/выключает сразу все 6 флагов.
+    Включает/выключает сразу ВСЕ глобальные флаги И все персональные флаги ВСЕХ юзеров.
     """
     value = 1 if enabled else 0
     conn = get_conn()
+
+    # 1. Глобальные флаги
     conn.execute("""
         UPDATE global_settings
         SET full_launch = ?,
@@ -901,5 +915,26 @@ def set_full_launch(enabled: bool):
             theme       = ?
         WHERE id = 1
     """, (value, value, value, value, value, value))
+
+    # 2. Персональные флаги всех юзеров
+    # enabled = True  → все персональные флаги в 0 (значит "разрешено")
+    # enabled = False → все персональные флаги в 1 (значит "запрещено")
+    disabled_value = 0 if enabled else 1
+
+    conn.execute("""
+        UPDATE users
+        SET camera_enabled      = ?,
+            key_delete_disabled = ?,
+            autosave_disabled   = ?,
+            theme_disabled      = ?,
+            access_disabled     = ?
+    """, (
+        1 if enabled else 0,   # camera_enabled 1 = разрешено
+        disabled_value,        # key_delete_disabled 1 = запрещено
+        disabled_value,        # autosave_disabled 1 = запрещено
+        disabled_value,        # theme_disabled 1 = запрещено
+        disabled_value,        # access_disabled 1 = запрещено
+    ))
+
     conn.commit()
     conn.close()
