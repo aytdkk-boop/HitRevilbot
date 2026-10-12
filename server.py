@@ -621,7 +621,7 @@ class UserToggleRequest(BaseModel):
     key: str
     site_id: str | None = None
     telegram_id: int
-    control: str      # 'key_delete' | 'autosave' | 'theme'
+    control: str      # 'key_delete' | 'autosave' | 'theme' | 'access"
     enabled: bool     # True = заблокировано, False = разрешено
 
 
@@ -630,7 +630,7 @@ def api_admin_user_toggle(payload: UserToggleRequest):
     """Включает/выключает один из управляющих флагов пользователя."""
     _check_admin_key(payload.key, payload.site_id)
 
-    if payload.control not in ("key_delete", "autosave", "theme"):
+    if payload.control not in ("key_delete", "autosave", "theme", "access"):
         raise HTTPException(status_code=400, detail="Invalid control")
 
     ok = set_user_control(payload.telegram_id, payload.control, bool(payload.enabled))
