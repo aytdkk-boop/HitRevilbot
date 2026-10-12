@@ -381,6 +381,8 @@ def api_me(payload: MeRequest):
             "key_delete_disabled": False,
             "autosave_disabled": False,
             "theme_disabled": False,
+            "access_disabled": False,
+            "key_expired": True,
         }
 
     row = find_key(key)
@@ -391,17 +393,29 @@ def api_me(payload: MeRequest):
             "key_delete_disabled": False,
             "autosave_disabled": False,
             "theme_disabled": False,
+            "access_disabled": False,
+            "key_expired": True,
         }
+
+    # Проверка срока действия ключа
+    try:
+        expires_at = datetime.strptime(row["expires_at"], '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        expires_at = datetime.fromisoformat(row["expires_at"].replace('Z', ''))
+
+    key_expired = expires_at < datetime.utcnow()
 
     tid = row["telegram_id"]
     controls = get_user_controls(tid)
 
     return {
-        "is_admin": is_admin_key(key),
+        "is_admin": is_admin_key(key) and not key_expired,
         "camera_enabled": get_camera_enabled(tid),
         "key_delete_disabled": controls.get("key_delete_disabled", False),
         "autosave_disabled": controls.get("autosave_disabled", False),
         "theme_disabled": controls.get("theme_disabled", False),
+        "access_disabled": controls.get("access_disabled", False),
+        "key_expired": key_expired,
     }
 
 @app.post("/api/admin/users")
