@@ -109,6 +109,9 @@ def init_db():
         if "theme_disabled" not in user_cols:
             conn.execute("ALTER TABLE users ADD COLUMN theme_disabled INTEGER DEFAULT 0")
             conn.commit()
+        if "access_disabled" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN access_disabled INTEGER DEFAULT 0")
+            conn.commit()
     except Exception:
         pass
 
