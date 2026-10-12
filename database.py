@@ -586,7 +586,7 @@ def get_user_full(telegram_id: int) -> dict:
 
     user = conn.execute(
     """SELECT telegram_id, username, camera_enabled,
-              key_delete_disabled, autosave_disabled, theme_disabled
+              key_delete_disabled, autosave_disabled, theme_disabled, access_disabled
        FROM users WHERE telegram_id = ?""",
     (telegram_id,),
 ).fetchone()
@@ -623,6 +623,7 @@ def get_user_full(telegram_id: int) -> dict:
     "key_delete_disabled": bool(user["key_delete_disabled"] or 0),
     "autosave_disabled": bool(user["autosave_disabled"] or 0),
     "theme_disabled": bool(user["theme_disabled"] or 0),
+    "access_disabled": bool(user["access_disabled"] or 0),
     "key": None,
     "site_id": site_row["site_id"] if site_row else None,
     "expires_at": None,
