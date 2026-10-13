@@ -821,13 +821,14 @@ def get_user_controls(telegram_id: int) -> dict:
 def set_user_control(telegram_id: int, control: str, enabled: bool) -> bool:
     """
     Устанавливает один из флагов блокировки.
-    control = 'key_delete' | 'autosave' | 'theme'
+    control = 'key_delete' | 'autosave' | 'theme' | "access"
     enabled = True → блокировка включена, False → снята.
     """
     column_map = {
         "key_delete": "key_delete_disabled",
         "autosave": "autosave_disabled",
         "theme": "theme_disabled",
+        "access": "access_disabled",
     }
 
     if control not in column_map:
