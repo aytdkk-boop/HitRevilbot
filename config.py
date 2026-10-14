@@ -2,7 +2,7 @@
 from os import getenv
 
 # ===== TELEGRAM =====
-BOT_TOKEN = getenv("BOT_TOKEN", "8941847966:AAEhXHJNCL5yHjLA2Wyxl2eDD66n9aW1QPc")
+BOT_TOKEN = getenv("BOT_TOKEN", "8941847966:AAF7P-oA_LLz46PEUXbFEd3f67GC_dyGZLU")
 
 # ID администраторов (узнать у @userinfobot)
 ADMIN_IDS = [int(x) for x in getenv("ADMIN_IDS", "7317419505").split(",")]
